@@ -1,0 +1,18 @@
+{
+  "products": [
+    {
+      "id": "paket_a",
+      "name": "Paket A",
+      "price": 10000,
+      "stock": 5,
+      "active": true
+    },
+    {
+      "id": "paket_b",
+      "name": "Paket B",
+      "price": 15000,
+      "stock": 0,
+      "active": true
+    }
+  ]
+}

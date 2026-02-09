@@ -1,0 +1,9 @@
+{
+  "token": "TOKEN-BOT-HERE",
+  "clientId": "927558297211514890",
+  "guildId": "862907253631483915",
+  "tripayMode": "sandbox",
+  "tripayApiKey": "TOKEN-TRIPAY",
+  "tripayPrivateKey": "TOKEN-PRIVATE-TRIPAY",
+  "tripayMerchantCode": "SANDBOX-MERCHANT"
+}
