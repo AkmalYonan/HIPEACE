@@ -1,6 +1,6 @@
 const axios = require("axios");
 const crypto = require("crypto");
-const config = require("./config.json");
+const config = require("../config/config.json");
 
 const tripayConfig = {
   mode: config.tripayMode,

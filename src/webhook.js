@@ -1,7 +1,7 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const crypto = require("crypto");
-const config = require("./config.json");
+const config = require("./config/config.json");
 const { EmbedBuilder } = require("discord.js");
 
 const {
@@ -9,7 +9,7 @@ const {
   getTransactionByRef,
   updateTransactionStatus,
 } = require("./database/transactions");
-const client = require("./discordClient");
+const client = require("./core/client");
 const { updateStock, getActiveProducts } = require("./database/products");
 
 const app = express();
@@ -165,4 +165,8 @@ app.post("/ping", (req, res) => {
   res.json({ pong: true });
 });
 
-app.listen(3000, () => console.log("🚀 Webhook Tripay aktif di port 3000"));
+function startWebhook() {
+  app.listen(3000, () => console.log("🚀 Webhook Tripay aktif di port 3000"));
+}
+
+module.exports = { startWebhook };

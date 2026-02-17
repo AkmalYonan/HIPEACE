@@ -2,9 +2,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const {
-  Client,
   Events,
-  GatewayIntentBits,
   Collection,
   ActionRowBuilder,
   StringSelectMenuBuilder,
@@ -12,22 +10,15 @@ const {
   ButtonStyle,
   EmbedBuilder,
 } = require("discord.js");
-const { token } = require("./config.json");
+const { token } = require("./config/config.json");
 const { getActiveProducts } = require("./database/products");
-const { createQrisTransaction } = require("./tripay"); // [UBAH 1] Import dari Tripay
+const { createQrisTransaction } = require("./utils/tripay");
 const {
   createTransaction,
   getTransactionByRef,
 } = require("./database/transactions");
-
-// Create a new client instance
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
-});
+const client = require("./core/client");
+const { startWebhook } = require("./webhook");
 
 // Load commands
 client.commands = new Collection();
@@ -51,6 +42,7 @@ commandFolders.forEach((folder) => {
 // Ready event
 client.once(Events.ClientReady, (c) => {
   console.log(`✅ Ready! Logged in as ${c.user.tag}`);
+  startWebhook();
 });
 
 // Unified interactionCreate handler
