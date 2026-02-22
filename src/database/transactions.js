@@ -1,10 +1,26 @@
 const db = require("./db.js");
 
+// async function getTransactionByRef(merchantRef) {
+//   const [rows] = await db.execute(
+//     "SELECT * FROM transactions WHERE merchant_ref = ?",
+//     [merchantRef],
+//   );
+//   return rows[0] || null;
+// }
+
 async function getTransactionByRef(merchantRef) {
   const [rows] = await db.execute(
-    "SELECT * FROM transactions WHERE merchant_ref = ?",
+    `
+    SELECT 
+      t.*,
+      p.name AS product_name
+    FROM transactions t
+    LEFT JOIN products p ON t.product_id = p.id
+    WHERE t.merchant_ref = ?
+    `,
     [merchantRef],
   );
+
   return rows[0] || null;
 }
 

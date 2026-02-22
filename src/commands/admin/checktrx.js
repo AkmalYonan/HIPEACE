@@ -62,7 +62,11 @@ module.exports = {
             value: `<@${trx.user_id}> (\`${trx.user_id}\`)`,
             inline: true,
           },
-          { name: "📦 Product ID", value: `${trx.product_id}`, inline: true },
+          {
+            name: "📦 Product ID",
+            value: `${trx.product_id} | **${trx.product_name}**`,
+            inline: true,
+          },
           {
             name: "💰 Amount",
             value: `Rp ${Number(trx.amount).toLocaleString("id-ID")}`,

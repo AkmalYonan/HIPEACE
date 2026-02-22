@@ -10,17 +10,55 @@ const {
   updateTransactionStatus,
 } = require("./database/transactions");
 const client = require("./core/client");
-const { updateStock, getActiveProducts } = require("./database/products");
+const { updateStock } = require("./database/products");
+const { getLogChannel } = require("./database/botSettings");
+const { getAdminRole } = require("./database/adminRoles");
 
 const app = express();
 app.use(bodyParser.json());
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: send an announcement embed to the configured log channel
+// ─────────────────────────────────────────────────────────────────────────────
+async function sendLogAnnouncement(guildId, logType, embed) {
+  try {
+    const setting = await getLogChannel(guildId, logType);
+    if (!setting) return; // no channel configured for this type
+
+    const channel = await client.channels
+      .fetch(setting.channel_id)
+      .catch(() => null);
+    if (!channel) {
+      console.warn(
+        `⚠️  Channel ${setting.channel_id} not found for log type '${logType}'`,
+      );
+      return;
+    }
+
+    // Resolve mention string if admin_type is set
+    let mentionStr = "";
+    if (setting.admin_type) {
+      const roleRow = await getAdminRole(guildId, setting.admin_type);
+      if (roleRow) mentionStr = `<@&${roleRow.roles_id}> `;
+    }
+
+    await channel.send({ content: mentionStr || undefined, embeds: [embed] });
+    console.log(
+      `📣 Log '${logType}' terkirim ke channel ${setting.channel_id}`,
+    );
+  } catch (err) {
+    console.error(`❌ Gagal kirim log '${logType}':`, err.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Webhook endpoint
+// ─────────────────────────────────────────────────────────────────────────────
 app.post("/webhook/tripay", (req, res) => {
   console.log("🔥 WEBHOOK MASUK");
   console.log("📦 BODY:", req.body);
 
   const callbackSignature = req.header("X-Callback-Signature");
-
   const localSignature = crypto
     .createHmac("sha256", config.tripayPrivateKey)
     .update(JSON.stringify(req.body))
@@ -32,7 +70,6 @@ app.post("/webhook/tripay", (req, res) => {
   }
 
   console.log("✅ SIGNATURE VALID");
-  console.log("🚀 MEMANGGIL handleTripayWebhook");
 
   res.status(200).json({ success: true });
 
@@ -41,6 +78,9 @@ app.post("/webhook/tripay", (req, res) => {
     .catch((err) => console.error("🔥 handleTripayWebhook ERROR", err));
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Core handler
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleTripayWebhook(data) {
   const status = String(data.status || "")
     .trim()
@@ -55,17 +95,20 @@ async function handleTripayWebhook(data) {
     return;
   }
 
-  // Ambil transaksi dari DB
   const trx = await getTransactionByRef(merchantRef);
-
   if (!trx) {
     console.error("❌ TRANSAKSI TIDAK DITEMUKAN:", merchantRef);
     return;
   }
 
-  /* =====================================================
+  // We need the guild_id to look up log channels.
+  // Fetch it from the guild the bot is primarily in (first guild).
+  const guild = client.guilds.cache.first();
+  const guildId = guild?.id || null;
+
+  /* ===================================================================
      STATUS: PAID
-  ===================================================== */
+  =================================================================== */
   if (status === "PAID") {
     if (trx.status === "PAID") {
       console.log("🔁 TRANSAKSI SUDAH PAID, SKIP:", merchantRef);
@@ -74,18 +117,14 @@ async function handleTripayWebhook(data) {
 
     console.log("🟢 UPDATE TRANSAKSI KE PAID:", merchantRef);
 
-    // 1️⃣ Update status transaksi
     await updateTransactionStatus(merchantRef, "PAID");
-
-    // 2️⃣ Kurangi stok
     await updateStock(trx.product_id, -1);
 
-    // 3️⃣ DM User
+    // ── DM User ────────────────────────────────────────────────
     try {
       const user = await client.users.fetch(trx.user_id);
-
-      const embed = new EmbedBuilder()
-        .setColor(0x2ecc71) // hijau = sukses
+      const dmEmbed = new EmbedBuilder()
+        .setColor(0x2ecc71)
         .setTitle("✅ Pembayaran Berhasil")
         .setDescription(
           "Terima kasih, pembayaran kamu telah **berhasil diproses** 🎉\n" +
@@ -102,31 +141,55 @@ async function handleTripayWebhook(data) {
             value: `Rp ${Number(trx.amount).toLocaleString("id-ID")}`,
             inline: true,
           },
-          {
-            name: "📦 Status",
-            value: "PAID",
-            inline: true,
-          },
+          { name: "📦 Status", value: "PAID", inline: true },
         )
-        .setFooter({
-          text: "Terima kasih telah bertransaksi 🙏",
-        })
+        .setFooter({ text: "Terima kasih telah bertransaksi 🙏" })
         .setTimestamp();
 
-      await user.send({ embeds: [embed] });
-
+      await user.send({ embeds: [dmEmbed] });
       console.log(`📩 DM terkirim ke user ${trx.user_id}`);
     } catch (err) {
       console.error("❌ Gagal DM user:", err.message);
+    }
+
+    // ── Announcement ke log channel ────────────────────────────
+    if (guildId) {
+      const announceEmbed = new EmbedBuilder()
+        .setColor(0x2ecc71)
+        .setTitle("💳 Transaksi PAID — Pembayaran Berhasil")
+        .addFields(
+          {
+            name: "👤 User",
+            value: `<@${trx.user_id}> (\`${trx.user_id}\`)`,
+            inline: false,
+          },
+          {
+            name: "📦 Produk",
+            value: trx.product_name || `ID ${trx.product_id}`,
+            inline: true,
+          },
+          {
+            name: "💰 Total",
+            value: `Rp ${Number(trx.amount).toLocaleString("id-ID")}`,
+            inline: true,
+          },
+          { name: "🧾 Reference", value: `\`${merchantRef}\``, inline: false },
+        )
+        .setFooter({ text: "Hipeace | Paid Transaction Log" })
+        .setTimestamp();
+
+      // Send to 'log_paid' type channel AND 'announcement' type channel
+      await sendLogAnnouncement(guildId, "log_paid", announceEmbed);
+      await sendLogAnnouncement(guildId, "announcement", announceEmbed);
     }
 
     console.log(`✅ TRANSAKSI SELESAI | ${merchantRef}`);
     return;
   }
 
-  /* =====================================================
+  /* ===================================================================
      STATUS: UNPAID / PENDING
-  ===================================================== */
+  =================================================================== */
   if (status === "UNPAID" || status === "PENDING") {
     if (trx.status !== "UNPAID") {
       console.log("🟡 UPDATE STATUS KE UNPAID:", merchantRef);
@@ -134,36 +197,65 @@ async function handleTripayWebhook(data) {
     }
 
     console.log("⏳ MENUNGGU PEMBAYARAN:", merchantRef);
+
+    // ── Announcement ke log channel (log_unpaid) ───────────────
+    if (guildId) {
+      const unpaidEmbed = new EmbedBuilder()
+        .setColor(0xf1c40f)
+        .setTitle("⏳ Transaksi UNPAID — Menunggu Pembayaran")
+        .addFields(
+          {
+            name: "👤 User",
+            value: `<@${trx.user_id}> (\`${trx.user_id}\`)`,
+            inline: false,
+          },
+          {
+            name: "📦 Produk",
+            value: trx.product_name || `ID ${trx.product_id}`,
+            inline: true,
+          },
+          {
+            name: "💰 Total",
+            value: `Rp ${Number(trx.amount).toLocaleString("id-ID")}`,
+            inline: true,
+          },
+          { name: "🧾 Reference", value: `\`${merchantRef}\``, inline: false },
+        )
+        .setFooter({ text: "Hipeace | Unpaid Transaction Log" })
+        .setTimestamp();
+
+      await sendLogAnnouncement(guildId, "log_unpaid", unpaidEmbed);
+    }
+
     return;
   }
 
-  /* =====================================================
+  /* ===================================================================
      STATUS: EXPIRED / FAILED
-  ===================================================== */
+  =================================================================== */
   if (status === "EXPIRED" || status === "FAILED") {
-    console.log("⛔ TRANSAKSI EXPIRED:", merchantRef);
-
+    console.log("⛔ TRANSAKSI EXPIRED/FAILED:", merchantRef);
     await updateTransactionStatus(merchantRef, "EXPIRED");
     return;
   }
 
-  /* =====================================================
+  /* ===================================================================
      STATUS TIDAK DIKENAL
-  ===================================================== */
+  =================================================================== */
   console.warn("⚠️ STATUS TIDAK DIKENAL:", status);
 }
 
-process.on("unhandledRejection", (err) => {
-  console.error("🔥 UNHANDLED REJECTION", err);
-});
+// ─────────────────────────────────────────────────────────────────────────────
+// Misc
+// ─────────────────────────────────────────────────────────────────────────────
+process.on("unhandledRejection", (err) =>
+  console.error("🔥 UNHANDLED REJECTION", err),
+);
+process.on("uncaughtException", (err) =>
+  console.error("🔥 UNCAUGHT EXCEPTION", err),
+);
 
-process.on("uncaughtException", (err) => {
-  console.error("🔥 UNCAUGHT EXCEPTION", err);
-});
-
-app.post("/ping", (req, res) => {
-  res.json({ pong: true });
-});
+app.post("/ping", (req, res) => res.json({ pong: true }));
 
 function startWebhook() {
   app.listen(3000, () => console.log("🚀 Webhook Tripay aktif di port 3000"));
