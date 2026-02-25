@@ -19,12 +19,12 @@
 *** https://www.markdownguide.org/basic-syntax/#reference-style-links
 -->
 
-[![Contributors][contributors-shield]][contributors-url]
+<!-- [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
 [![Issues][issues-shield]][issues-url]
 [![project_license][license-shield]][license-url]
-[![LinkedIn][linkedin-shield]][linkedin-url]
+[![LinkedIn][linkedin-shield]][linkedin-url] -->
 
 <!-- PROJECT LOGO -->
 <br />
@@ -154,6 +154,8 @@ This is an example of how to list things you need to use the software and how to
    git remote set-url origin AkmalYonan/repo_name
    git remote -v # confirm the changes
    ``` -->
+
+\*Note: Dont Forget import Database
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
