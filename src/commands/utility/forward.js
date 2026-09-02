@@ -29,8 +29,16 @@ module.exports = {
     const fs = require("node:fs");
     const path = require("node:path");
 
-    const configPath = path.join(__dirname, "../../logConfig.json");
-    const logConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    const configPath = path.join(__dirname, "../../config/logConfig.json");
+    let logConfig = { logChannelId: null };
+    try {
+      if (fs.existsSync(configPath)) {
+        logConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      }
+    } catch {
+      logConfig = { logChannelId: null };
+    }
+
 
     const sourceChannel = interaction.options.getChannel("channel_asal");
     const messageId = interaction.options.getString("message_id");

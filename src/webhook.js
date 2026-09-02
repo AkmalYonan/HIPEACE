@@ -10,11 +10,14 @@ const {
   updateTransactionStatus,
 } = require("./database/transactions");
 const client = require("./core/client");
-const { updateStock } = require("./database/products");
+const { updateStock, getProductById } = require("./database/products");
 const { getLogChannel } = require("./database/botSettings");
 const { getAdminRole } = require("./database/adminRoles");
+const { getAllActiveShopMessages } = require("./database/shopMessages");
+const { buildShopMessage } = require("./utils/shopEmbed");
 
 const app = express();
+
 app.use(bodyParser.json());
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,6 +122,50 @@ async function handleTripayWebhook(data) {
 
     await updateTransactionStatus(merchantRef, "PAID");
     await updateStock(trx.product_id, -1);
+
+    // ── Auto Live-Refresh Shop Messages ─────────────────────────
+    try {
+      const product = await getProductById(trx.product_id);
+      if (product && product.category_id) {
+        const shopRows = await getAllActiveShopMessages();
+        for (const shopRow of shopRows) {
+          try {
+            const channel = await client.channels
+              .fetch(shopRow.channel_id)
+              .catch(() => null);
+            if (!channel) continue;
+
+            const msg = await channel.messages
+              .fetch(shopRow.message_id)
+              .catch(() => null);
+            if (!msg || !msg.components?.length) continue;
+
+            // Check if this message belongs to the affected category
+            const firstButton = msg.components[0]?.components[0];
+            const customId = firstButton?.customId || "";
+            // customId pattern: shop_prev_<catId>_<page> or buy_cat_<catId>_<page> or shop_refresh_<catId>_<page>
+            const parts = customId.split("_");
+            if (parts.length >= 4) {
+              const msgCatId = parseInt(parts[2], 10);
+              const msgPage = parseInt(parts[3], 10) || 1;
+              if (msgCatId === product.category_id) {
+                const refreshedData = await buildShopMessage(msgCatId, msgPage);
+                await msg.edit({
+                  embeds: refreshedData.embeds,
+                  components: refreshedData.components,
+                });
+                console.log(`🔄 Auto-refreshed shop message ${msg.id} in #${channel.name}`);
+              }
+            }
+          } catch (err) {
+            console.warn(`[SHOP REFRESH WARNING] Gagal refresh message ${shopRow.message_id}:`, err.message);
+          }
+        }
+      }
+    } catch (refreshErr) {
+      console.error("[AUTO REFRESH ERROR]", refreshErr.message);
+    }
+
 
     // ── DM User ────────────────────────────────────────────────
     try {

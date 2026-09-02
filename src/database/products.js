@@ -9,11 +9,24 @@ async function getActiveProducts() {
     `SELECT p.*, c.name AS category_name, c.delivery_type
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.id
-     WHERE p.active = 1
+     WHERE (p.active = 1 OR p.active = 'Y')
      ORDER BY p.id ASC`,
   );
   return rows;
 }
+
+async function getActiveProductsByCategory(categoryId) {
+  const [rows] = await db.query(
+    `SELECT p.*, c.name AS category_name, c.delivery_type
+     FROM products p
+     LEFT JOIN categories c ON p.category_id = c.id
+     WHERE (p.active = 1 OR p.active = 'Y') AND p.category_id = ?
+     ORDER BY p.id ASC`,
+    [categoryId],
+  );
+  return rows;
+}
+
 
 // ─────────────────────────────────────────────
 // CREATE
@@ -142,6 +155,7 @@ async function updateStock(productId, delta) {
 
 module.exports = {
   getActiveProducts,
+  getActiveProductsByCategory,
   createProduct,
   getProductById,
   getAllProducts,
@@ -149,3 +163,4 @@ module.exports = {
   deleteProduct,
   updateStock,
 };
+
